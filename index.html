@@ -2009,11 +2009,21 @@
                 closeDocModal();
             });
 
-            if (window.location.hash.includes('access_token') && supabaseClient) {
-                supabaseClient.auth.getSession().then(({ data }) => {
-                    if (data?.session) window.location.replace('/app.html');
-                }).catch(() => { });
+            // Fast-track if session exists or hash is present
+            if ((window.location.hash.includes('access_token') || window.location.hash.includes('id_token')) && isLoggedIn) {
+                window.location.replace('/app.html');
             }
+            
+            // Periodically check session if landing on home
+            const sessionCheck = setInterval(async () => {
+                if (!supabaseClient) return;
+                const { data } = await supabaseClient.auth.getSession();
+                if (data?.session) {
+                    clearInterval(sessionCheck);
+                    window.location.replace('/app.html');
+                }
+            }, 1000);
+            
             refreshSession();
 
         });
