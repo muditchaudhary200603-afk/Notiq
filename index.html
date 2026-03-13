@@ -1959,7 +1959,7 @@
                 try {
                     const { error } = await supabaseClient.auth.signInWithOtp({
                         email,
-                        options: { emailRedirectTo: `${window.location.origin}/index.html` }
+                        options: { emailRedirectTo: 'https://notiq-omega.vercel.app/index.html' }
                     });
                     if (error) throw error;
                     subBtn.textContent = '✓ Magic Link Sent';
