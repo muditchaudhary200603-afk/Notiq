@@ -5,8 +5,7 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "server.js" },
-    { "src": "/app", "dest": "server.js" },
-    { "src": "/app.html", "dest": "server.js" },
-    { "src": "/(.*)", "dest": "server.js" }
+    { "src": "/app", "dest": "/app.html" },
+    { "src": "/(.*)", "dest": "/$1" }
   ]
 }

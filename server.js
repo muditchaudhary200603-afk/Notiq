@@ -10,7 +10,9 @@ const PORT = process.env.PORT || 3011;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+
+// For local development, serve from public
+app.use(express.static(path.join(__dirname, 'public')));
 
 const GROQ_API_KEYS = [
   process.env.GROQ_API_KEY,
@@ -77,16 +79,9 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Wildcard for local fallback
 app.get('*', (req, res) => {
-  const p = req.path;
-  if (p === '/app' || p === '/app.html') {
-    return res.sendFile(path.join(__dirname, 'app.html'));
-  }
-  // Avoid serving index.html for missing assets
-  if (p.includes('.') && !p.endsWith('.html')) {
-    return res.status(404).send('Not Found');
-  }
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
@@ -100,10 +95,7 @@ app.listen(PORT, '0.0.0.0', () => {
       }
     }
   }
-  const qk = nextKey();
   console.log(`\n  ✦ Notiq server running at:`);
   console.log(`    Local:   http://localhost:${PORT}`);
   console.log(`    Network: http://${ip}:${PORT}\n`);
-  console.log(`  Providers:`);
-  console.log(`    Groq:       ${qk ? '✓ configured' : '✗ add GROQ_API_KEY to .env'}\n`);
 });
