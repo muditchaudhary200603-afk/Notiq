@@ -7,7 +7,7 @@
     "build:app": "node build-app.js",
     "start": "node server.js",
     "dev": "npm run build:app && node server.js",
-    "vercel-build": "npm run build:app"
+    "build": "npm run build:app"
   },
   "engines": {
     "node": ">=18.0.0"
