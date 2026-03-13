@@ -1,102 +1,73 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3011;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// ── GET GROQ API KEYS ──────────────────────────
-function getKeys(envVar) {
-  const val = process.env[envVar];
-  if (!val) return [];
-  return val.split(',').map(k => k.trim()).filter(Boolean);
-}
+const GROQ_API_KEYS = [
+  process.env.GROQ_API_KEY,
+  process.env.GROQ_API_KEY_1,
+  process.env.GROQ_API_KEY_2,
+  process.env.GROQ_API_KEY_3,
+  process.env.GROQ_API_KEY_4,
+  process.env.GROQ_API_KEY_5,
+  process.env.GROQ_API_KEY_6,
+  process.env.GROQ_API_KEY_7,
+  process.env.GROQ_API_KEY_8,
+  process.env.GROQ_API_KEY_9,
+  process.env.GROQ_API_KEY_10,
+].filter(Boolean);
 
-const keyIndex = { groq: 0 };
+let keyIndex = 0;
+const nextKey = () => GROQ_API_KEYS.length ? GROQ_API_KEYS[keyIndex++ % GROQ_API_KEYS.length] : null;
 
-function nextKey() {
-  const keys = getKeys('GROQ_API_KEYS');
-  if (!keys.length) {
-    return process.env.GROQ_API_KEY || null;
-  }
-  const key = keys[keyIndex.groq % keys.length];
-  keyIndex.groq++;
-  return key;
-}
-
-// ── GROQ PROVIDER ─────────────────────────────────────
-async function callGroq(messages, key) {
-  const groqBody = {
-    model: 'llama-3.3-70b-versatile',
-    temperature: 0.2,
-    max_tokens: 8000,
-    messages: messages
-  };
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + key
-    },
-    body: JSON.stringify(groqBody)
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Groq ${res.status}: ${JSON.stringify(data)}`);
-  data.provider = 'groq';
-  return data;
-}
-
-// ── SIMPLE CACHE ──────────────────────────────────────
 const cache = new Map();
-const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
 
-function getCacheKey(messages) {
-  const user = messages.find(m => m.role === 'user')?.content || '';
-  return user.substring(0, 200).replace(/\s+/g, ' ').trim();
-}
+app.post('/api/groq', async (req, res) => {
+  const { messages, model, temperature, max_tokens, stream } = req.body;
+  const cacheKey = JSON.stringify({ messages, model, temperature });
 
-// ── MAIN API ROUTE ────────────────────────────────────
-app.post(['/api/groq', '/api/generate'], async (req, res) => {
-  const { messages } = req.body;
-
-  // Check cache first
-  const ck = getCacheKey(messages || []);
-  if (cache.has(ck)) {
-    const cached = cache.get(ck);
-    if (Date.now() - cached.time < CACHE_TTL) {
-      console.log('  ⚡ Cache hit');
-      return res.json({ ...cached.data, cached: true });
-    }
-    cache.delete(ck);
+  if (cache.has(cacheKey)) {
+    return res.json(cache.get(cacheKey));
   }
 
-  // Get key
-  const targetKey = nextKey();
-
-  if (!targetKey) {
-    return res.status(500).json({ error: { message: 'Service unavailable' } });
-  }
+  const key = nextKey();
+  if (!key) return res.status(500).json({ error: 'No Groq API key configured' });
 
   try {
-    console.log(`  → Trying Groq...`);
-    const data = await callGroq(req.body.messages || [], targetKey);
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages,
+        model: model || 'llama-3.3-70b-versatile',
+        temperature: temperature ?? 0.7,
+        max_tokens: max_tokens ?? 2048,
+        stream: stream ?? false
+      })
+    });
 
-    // Cache successful response
-    cache.set(ck, { data, time: Date.now() });
-    console.log(`  ✓ Groq succeeded`);
-    return res.json(data);
-  } catch (err) {
-    console.log(`  ✗ Groq failed: ${err.message.substring(0, 150)}`);
-    return res.status(502).json({ error: { message: 'Something went wrong, please try again' } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Groq API error');
+
+    if (!stream) cache.set(cacheKey, data);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Status endpoint for settings page
 app.get('/api/status', (req, res) => {
   res.json({
     providers: {
@@ -107,17 +78,28 @@ app.get('/api/status', (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  if (req.path === '/app' || req.path === '/app.html') {
-    res.sendFile(path.join(__dirname, 'app.html'));
-  } else {
-    res.sendFile(path.join(__dirname, 'index.html'));
+  const p = req.path;
+  if (p === '/app' || p === '/app.html') {
+    return res.sendFile(path.join(__dirname, 'app.html'));
   }
+  // Avoid serving index.html for missing assets
+  if (p.includes('.') && !p.endsWith('.html')) {
+    return res.status(404).send('Not Found');
+  }
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   const nets = require('os').networkInterfaces();
   let ip = 'localhost';
-  for (const iface of Object.values(nets)) for (const n of iface) if (n.family === 'IPv4' && !n.internal) { ip = n.address; break; }
+  for (const iface of Object.values(nets)) {
+    for (const n of iface) {
+      if (n.family === 'IPv4' && !n.internal) {
+        ip = n.address;
+        break;
+      }
+    }
+  }
   const qk = nextKey();
   console.log(`\n  ✦ Notiq server running at:`);
   console.log(`    Local:   http://localhost:${PORT}`);
