@@ -4,6 +4,9 @@
   "description": "Premium Study Notes Generator",
   "scripts": {
     "build:app": "node build-app.js",
+    "dev": "npm run build:app && node server_local.js"
+  },
+  "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2"
