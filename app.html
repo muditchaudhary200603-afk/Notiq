@@ -595,14 +595,24 @@
     }
     async function checkAuth() {
       if (!supabase) return;
+      
+      // If we just landed from a magic link, give it a moment to process the hash
       if (window.location.hash.includes('access_token')) {
         try {
+          // Explicitly wait a moment for the URL hash to be processed by Supabase
+          await new Promise(r => setTimeout(r, 800));
           await supabase.auth.getSession();
         } catch (_) { }
       }
+
       const { data } = await supabase.auth.getSession();
       if (!data?.session) {
-        window.location.replace('/index.html');
+        // Double check after another short delay to prevent false negatives
+        await new Promise(r => setTimeout(r, 500));
+        const { data: retryData } = await supabase.auth.getSession();
+        if (!retryData?.session) {
+          window.location.replace('/index.html');
+        }
       }
     }
     checkAuth();
