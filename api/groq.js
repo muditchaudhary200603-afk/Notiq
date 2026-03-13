@@ -4,15 +4,32 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: { message: 'Method not allowed' } });
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: { message: 'Service unavailable' } });
+  const GROQ_API_KEYS = [
+    process.env.GROQ_API_KEY,
+    process.env.GROQ_API_KEY_1,
+    process.env.GROQ_API_KEY_2,
+    process.env.GROQ_API_KEY_3,
+    process.env.GROQ_API_KEY_4,
+    process.env.GROQ_API_KEY_5,
+    process.env.GROQ_API_KEY_6,
+    process.env.GROQ_API_KEY_7,
+    process.env.GROQ_API_KEY_8,
+    process.env.GROQ_API_KEY_9,
+    process.env.GROQ_API_KEY_10,
+  ].filter(Boolean);
+
+  if (GROQ_API_KEYS.length === 0) {
+    return res.status(500).json({ error: { message: 'Service unavailable: No API keys configured' } });
   }
 
+  // Randomize key selection for serverless distribution
+  const apiKey = GROQ_API_KEYS[Math.floor(Math.random() * GROQ_API_KEYS.length)];
+
   try {
-    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    if (!messages.length) {
-      return res.status(400).json({ error: { message: 'Invalid request' } });
+    const { messages, model, temperature, max_tokens } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: { message: 'Invalid request: messages must be an array' } });
     }
 
     const upstream = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -22,23 +39,17 @@ module.exports = async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        max_tokens: 8000,
+        model: model || 'llama-3.3-70b-versatile',
+        temperature: temperature ?? 0.7,
+        max_tokens: max_tokens ?? 2048,
         messages
       })
     });
 
     const data = await upstream.json();
     if (!upstream.ok) {
-      console.error('Groq API error:', upstream.status, data);
-      if (upstream.status === 429) {
-        return res.status(429).json({ error: { message: 'Rate limit exceeded' } });
-      }
-      if (upstream.status === 401 || upstream.status === 403) {
-        return res.status(401).json({ error: { message: 'Unauthorized' } });
-      }
-      return res.status(502).json({ error: { message: 'Something went wrong, please try again' } });
+        console.error('Groq API error:', upstream.status, data);
+        return res.status(upstream.status).json(data);
     }
 
     return res.status(200).json(data);
