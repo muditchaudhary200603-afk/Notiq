@@ -6,6 +6,9 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "server.js" },
     { "src": "/app", "dest": "/app.html" },
+    { "src": "/index.html", "dest": "/index.html" },
+    { "src": "/app.compiled.js", "dest": "/app.compiled.js" },
+    { "src": "/style.css", "dest": "/style.css" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }

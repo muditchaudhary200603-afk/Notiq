@@ -11,8 +11,10 @@ const PORT = process.env.PORT || 3011;
 app.use(cors());
 app.use(express.json());
 
-// For local development, serve from public
-app.use(express.static(path.join(__dirname, 'public')));
+// Only serve static for local development
+if (process.env.NODE_ENV !== 'production') {
+  app.use(express.static(path.join(__dirname)));
+}
 
 const GROQ_API_KEYS = [
   process.env.GROQ_API_KEY,
@@ -79,23 +81,19 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Wildcard for local fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// NO wildcard catch-all here. Vercel routes will handle fallbox to index.html if needed.
+// But for sanity, let's keep one for local ONLY
+if (process.env.NODE_ENV !== 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  });
+}
 
-app.listen(PORT, '0.0.0.0', () => {
-  const nets = require('os').networkInterfaces();
-  let ip = 'localhost';
-  for (const iface of Object.values(nets)) {
-    for (const n of iface) {
-      if (n.family === 'IPv4' && !n.internal) {
-        ip = n.address;
-        break;
-      }
-    }
-  }
-  console.log(`\n  ✦ Notiq server running at:`);
-  console.log(`    Local:   http://localhost:${PORT}`);
-  console.log(`    Network: http://${ip}:${PORT}\n`);
-});
+// Export for Vercel
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n  ✦ Notiq server running locally at http://localhost:${PORT}`);
+  });
+}
