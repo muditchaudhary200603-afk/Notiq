@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Notiq — Study Smarter</title>
+  <meta name="description"
+    content="Notiq — AI-powered study assistant. Upload notes, get structured study materials, flashcards, and quizzes instantly.">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'nonce-notiqnonce'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; connect-src 'self' https://api.groq.com https://*.supabase.co https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
+
+  <script nonce="notiqnonce">
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+
+    function showGlobalCrash(message) {
+      const root = document.getElementById('root');
+      if (!root) return;
+      root.replaceChildren();
+      const wrap = document.createElement('div');
+      wrap.style.padding = '40px';
+      wrap.style.textAlign = 'center';
+      wrap.style.fontFamily = 'system-ui, sans-serif';
+      const h2 = document.createElement('h2');
+      h2.textContent = 'Something went wrong';
+      const p = document.createElement('p');
+      p.textContent = message || 'Please refresh and try again.';
+      wrap.appendChild(h2);
+      wrap.appendChild(p);
+      root.appendChild(wrap);
+    }
+
+    window.onerror = function (message, source, lineno, colno, error) {
+      console.error('Unhandled error:', { message, source, lineno, colno, error });
+      showGlobalCrash('Something went wrong, please refresh and try again.');
+      return false;
+    };
+
+    window.onunhandledrejection = function (event) {
+      console.error('Unhandled rejection:', event?.reason);
+      showGlobalCrash('Something went wrong, please refresh and try again.');
+    };
+  </script>
+
+  <style>
+    #slides-pdf-section {
+      display: none;
+      position: fixed;
+      top: 64px;
+      right: 0;
+      bottom: 0;
+      left: var(--side, 260px);
+      z-index: 120;
+      overflow: auto;
+      background: var(--bg, #09090b);
+      padding: 24px 30px 48px;
+      color: var(--ink, #fff);
+    }
+
+    body.spdf-active #slides-pdf-section {
+      display: block;
+    }
+
+    body.spdf-active .main .page {
+      display: none !important;
+    }
+
+    .pdf-brand-card {
+      display: none !important;
+    }
+
+    .spdf-wrap {
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+
+    .spdf-head h1 {
+      margin: 0;
+      font-size: clamp(26px, 3vw, 38px);
+      line-height: 1.2;
+      color: var(--ink);
+    }
+
+    .spdf-badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #8bc8ff;
+      border: 1px solid rgba(10, 132, 255, 0.45);
+      background: rgba(10, 132, 255, 0.14);
+    }
+
+    .spdf-sub {
+      margin-top: 10px;
+      color: var(--ink3);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .spdf-indicators {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+      margin-bottom: 16px;
+    }
+
+    .spdf-ind {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      min-height: 42px;
+      padding: 8px 10px;
+      color: var(--ink3);
+      background: var(--card-border);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .spdf-ind .num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--ink2);
+    }
+
+    .spdf-ind.completed {
+      border-color: rgba(52, 199, 89, 0.4);
+      color: #9ee7b0;
+      background: rgba(52, 199, 89, 0.1);
+    }
+
+    .spdf-ind.completed .num {
+      background: #34c759;
+      color: #072110;
+    }
+
+    .spdf-ind.current {
+      border-color: rgba(10, 132, 255, 0.6);
+      color: #8bc8ff;
+      box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.35);
+    }
+
+    .spdf-ind.current .num {
+      background: #0a84ff;
+      color: #04172f;
+      animation: spdfPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes spdfPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+
+    .spdf-acc {
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      background: var(--card-border);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .spdf-acc-toggle {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      color: var(--ink);
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .spdf-acc-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+    }
+
+    .spdf-acc.open .spdf-acc-content {
+      max-height: 1600px;
+    }
+
+    .spdf-info-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0 14px 14px;
+    }
+
+    .spdf-info-card {
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .spdf-info-card h4 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--ink2);
+    }
+
+    .spdf-info-card p {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--ink3);
+      line-height: 1.5;
+    }
+
+    .spdf-info-card ul {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 11.5px;
+      color: var(--ink3);
+      line-height: 1.45;
+    }
+
+    .spdf-step {
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      background: var(--card-border);
+      padding: 14px;
+      margin-top: 12px;
+      transition: opacity .2s ease;
+    }
+
+    .spdf-step.locked {
+      opacity: .38;
+      filter: grayscale(.16);
+      pointer-events: none;
+    }
+
+    .spdf-step h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: var(--ink2);
+    }
+
+    .spdf-upload {
+      min-height: 170px;
+      border: 2px dashed var(--glass-border2);
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      cursor: pointer;
+      padding: 16px;
+      transition: all .2s ease;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .spdf-upload.drag {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    .spdf-upload-meta {
+      margin-top: 8px;
+      color: var(--ink3);
+      font-size: 13px;
+    }
+
+    .spdf-upload-note {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #f5b972;
+      font-weight: 600;
+    }
+
+    .spdf-privacy {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #8fd9a6;
+      font-weight: 700;
+    }
+
+    .spdf-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .spdf-btn {
+      border: 1px solid var(--glass-border2);
+      background: var(--card-bg);
+      color: var(--ink2);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .spdf-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .spdf-btn.success {
+      background: #34c759;
+      border-color: #34c759;
+      color: #fff;
+    }
+
+    .spdf-btn:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    .spdf-thumbs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .spdf-thumb {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .spdf-thumb canvas {
+      width: 100%;
+      display: block;
+    }
+
+    .spdf-thumb .meta {
+      font-size: 11px;
+      padding: 6px;
+      text-align: center;
+      color: var(--ink3);
+    }
+
+    .spdf-thumb.off {
+      opacity: .4;
+    }
+
+    .spdf-thumb .strike {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(160deg, transparent 48%, rgba(255, 82, 82, .86) 49%, rgba(255, 82, 82, .86) 51%, transparent 52%);
+      pointer-events: none;
+    }
+
+    .spdf-thumb.off .strike {
+      display: block;
+    }
+
+    .spdf-check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .spdf-check {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .spdf-check label {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      cursor: pointer;
+      color: var(--ink2);
+      font-size: 13px;
+    }
+
+    .spdf-check small {
+      display: block;
+      color: var(--ink3);
+      font-size: 12px;
+      margin-top: 3px;
+      line-height: 1.45;
+    }
+
+    .spdf-layout {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .spdf-layout label {
+      display: block;
+      font-size: 12px;
+      color: var(--ink3);
+      margin-bottom: 6px;
+    }
+
+    .spdf-layout input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border2);
+      background: var(--card-bg);
+      color: var(--ink);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .spdf-layout-skel-wrap {
+      margin-bottom: 12px;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .spdf-layout-skel-head {
+      font-size: 12px;
+      color: var(--ink3);
+      margin-bottom: 8px;
+    }
+
+    .spdf-layout-skel {
+      display: grid;
+      grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+      gap: 6px;
+      min-height: 74px;
+      max-width: 320px;
+    }
+
+    .spdf-layout-cell {
+      height: 26px;
+      border-radius: 6px;
+      border: 1px dashed rgba(10, 132, 255, 0.45);
+      background: linear-gradient(120deg, rgba(10, 132, 255, 0.12), rgba(255, 255, 255, 0.02));
+    }
+
+    .spdf-orient {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--ink3);
+    }
+
+    .spdf-opt {
+      border: 1px solid var(--glass-border2);
+      border-radius: 999px;
+      padding: 6px 10px;
+      cursor: pointer;
+      background: var(--card-bg);
+      color: var(--ink2);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .spdf-opt.active {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+      color: #8bc8ff;
+    }
+
+    .spdf-warning {
+      color: #f3c56c;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .spdf-progress-wrap {
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.04);
+      margin-top: 8px;
+    }
+
+    .spdf-progress {
+      width: 0%;
+      height: 10px;
+      background: linear-gradient(90deg, #0a84ff, #4db0ff);
+      transition: width .3s ease;
+    }
+
+    .spdf-status {
+      margin-top: 8px;
+      color: var(--ink3);
+      font-size: 13px;
+    }
+
+    .spdf-ok {
+      color: #9ee7b0;
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .spdf-summary {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--ink3);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .spdf-foot {
+      margin-top: 8px;
+      color: var(--ink4);
+      font-size: 12px;
+    }
+
+    .spdf-reset {
+      margin-top: 8px;
+      border: 0;
+      background: transparent;
+      color: #8bc8ff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    @media (max-width: 768px) {
+      #slides-pdf-section {
+        left: 0;
+        padding: 16px 14px 28px;
+      }
+
+      .spdf-indicators {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .spdf-info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .spdf-thumbs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .spdf-check-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .spdf-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+
+  <!-- Supabase Auth Guard -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script nonce="notiqnonce">
+    const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://wjlyczzrhloayklbprmc.supabase.co';
+    const SUPABASE_ANON_KEY = window.__SUPABASE_ANON_KEY__ || '';
+    let supabase;
+    try {
+      if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch (e) {
+      console.warn('Supabase not configured:', e.message);
+    }
+    async function checkAuth() {
+      if (!supabase) return;
+      if (window.location.hash.includes('access_token')) {
+        try {
+          await supabase.auth.getSession();
+        } catch (_) { }
+      }
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session) {
+        window.location.replace('/index.html');
+      }
+    }
+    checkAuth();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <section id="slides-pdf-section" aria-label="Slides to PDF Tool">
+    <div class="spdf-wrap">
+      <div class="spdf-head">
+        <h1>Slides / PPT / PDF → Print-Ready PDF</h1>
+        <div class="spdf-badge">Browser Only — No Upload to Server</div>
+        <div class="spdf-sub">Enhance and print your slides in 6 simple steps. Everything runs locally in your browser.</div>
+      </div>
+      <div class="spdf-indicators" id="spdf-indicators">
+        <div class="spdf-ind current" data-step="1"><span class="num">1</span><span>Upload</span></div>
+        <div class="spdf-ind" data-step="2"><span class="num">2</span><span>Preview</span></div>
+        <div class="spdf-ind" data-step="3"><span class="num">3</span><span>Enhance</span></div>
+        <div class="spdf-ind" data-step="4"><span class="num">4</span><span>Layout</span></div>
+        <div class="spdf-ind" data-step="5"><span class="num">5</span><span>Process</span></div>
+        <div class="spdf-ind" data-step="6"><span class="num">6</span><span>Download</span></div>
+      </div>
+      <div class="spdf-acc" id="spdf-accordion">
+        <button class="spdf-acc-toggle" id="spdf-acc-toggle" type="button">How it works ▾</button>
+        <div class="spdf-acc-content">
+          <div class="spdf-info-grid">
+            <div class="spdf-info-card">
+              <h4>Step 1 — Upload Your PDF</h4>
+              <p>Click to select or drag & drop your PDF. Loads directly in browser.</p>
+              <ul>
+                <li>Files stay on your device</li>
+                <li>No account needed</li>
+                <li>Instant loading</li>
+                <li>Works with any PDF</li>
+                <li>Complete privacy guaranteed</li>
+              </ul>
+            </div>
+            <div class="spdf-info-card">
+              <h4>Step 2 — Preview & Edit Pages</h4>
+              <p>View thumbnails of all pages. Select/deselect pages, edit individually.</p>
+              <ul>
+                <li>Interactive thumbnails</li>
+                <li>Click to select/deselect</li>
+                <li>Edit pages separately</li>
+                <li>Remove unwanted slides</li>
+                <li>Select all or none</li>
+              </ul>
+            </div>
+            <div class="spdf-info-card">
+              <h4>Step 3 — Apply Enhancements</h4>
+              <p>Make notes easier to read and cheaper to print.</p>
+              <ul>
+                <li>Invert Colors</li>
+                <li>Remove Backgrounds</li>
+                <li>Black & White</li>
+                <li>Remove Logo/Watermarks</li>
+              </ul>
+            </div>
+            <div class="spdf-info-card">
+              <h4>Step 4 — Configure Layout</h4>
+              <p>Arrange multiple slides per page.</p>
+              <ul>
+                <li>1–8 rows/columns</li>
+                <li>Portrait or Landscape</li>
+                <li>Up to 64 slides per page</li>
+                <li>1cm margins on both sides</li>
+              </ul>
+            </div>
+            <div class="spdf-info-card">
+              <h4>Step 5 — Process in Browser</h4>
+              <p>All processing happens locally. Real-time progress tracking.</p>
+              <ul>
+                <li>Local processing</li>
+                <li>Progress bar</li>
+                <li>Completes in seconds</li>
+                <li>Works offline</li>
+                <li>No data sent anywhere</li>
+              </ul>
+            </div>
+            <div class="spdf-info-card">
+              <h4>Step 6 — Download Your PDF</h4>
+              <p>Get your print-optimized PDF instantly.</p>
+              <ul>
+                <li>High-quality print-ready PDF</li>
+                <li>Optimized DPI and margins</li>
+                <li>Instant download</li>
+                <li>No file retention</li>
+                <li>Ready to print immediately</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <section class="spdf-step" id="spdf-step-1" data-step="1">
+        <h3>Step 1 — Upload</h3>
+        <input id="spdf-file-input" type="file" accept=".pdf,.ppt,.pptx" hidden />
+        <div class="spdf-upload" id="spdf-dropzone">
+          <div>
+            <strong>Drag & drop PDF here</strong><br />
+            <span class="spdf-sub">or click to browse</span>
+          </div>
+        </div>
+        <div class="spdf-upload-meta" id="spdf-upload-meta">No file selected.</div>
+        <div class="spdf-upload-note" id="spdf-upload-note"></div>
+        <div class="spdf-privacy">🔒 Your file never leaves this device</div>
+      </section>
+      <section class="spdf-step locked" id="spdf-step-2" data-step="2">
+        <h3>Step 2 — Preview & Edit Pages</h3>
+        <div class="spdf-toolbar">
+          <button class="spdf-btn" id="spdf-select-all" type="button">Select All</button>
+          <button class="spdf-btn" id="spdf-deselect-all" type="button">Deselect None</button>
+          <div class="spdf-count" id="spdf-selected-count">0 pages selected</div>
+        </div>
+        <div class="spdf-thumbs" id="spdf-thumbs"></div>
+        <button class="spdf-btn" id="spdf-to-step3" type="button" disabled>Continue to Enhancements →</button>
+      </section>
+      <section class="spdf-step locked" id="spdf-step-3" data-step="3">
+        <h3>Step 3 — Apply Enhancements</h3>
+        <div class="spdf-check-grid">
+          <div class="spdf-check">
+            <label><input id="spdf-opt-invert" type="checkbox" /> <span>Invert Colors<small>Dark backgrounds become white, text stays readable</small></span></label>
+          </div>
+          <div class="spdf-check">
+            <label><input id="spdf-opt-rmbg" type="checkbox" /> <span>Remove White Backgrounds<small>Clean up scanned or slide backgrounds</small></span></label>
+          </div>
+          <div class="spdf-check">
+            <label><input id="spdf-opt-bw" type="checkbox" /> <span>Black & White<small>Convert to grayscale to save printer ink</small></span></label>
+          </div>
+          <div class="spdf-check">
+            <label><input id="spdf-opt-rmlogo" type="checkbox" /> <span>Remove Logo/Watermark<small>Attempt to remove repeated corner elements</small></span></label>
+          </div>
+        </div>
+        <button class="spdf-btn" id="spdf-to-step4" type="button">Continue to Layout →</button>
+      </section>
+      <section class="spdf-step locked" id="spdf-step-4" data-step="4">
+        <h3>Step 4 — Configure Layout</h3>
+        <div class="spdf-layout">
+          <div>
+            <label for="spdf-rows">Rows (1-8)</label>
+            <input id="spdf-rows" type="number" min="1" max="8" value="1" />
+          </div>
+          <div>
+            <label for="spdf-cols">Columns (1-8)</label>
+            <input id="spdf-cols" type="number" min="1" max="8" value="1" />
+          </div>
+          <div>
+            <label>Slides per page</label>
+            <input id="spdf-layout-preview" type="text" readonly value="= 1 slides per page" />
+          </div>
+        </div>
+        <div class="spdf-warning" id="spdf-layout-warning" hidden>Maximum is 64 slides per page</div>
+        <div class="spdf-layout-skel-wrap">
+          <div class="spdf-layout-skel-head">Layout preview (rows × columns)</div>
+          <div class="spdf-layout-skel" id="spdf-layout-skel" style="--cols:1">
+            <div class="spdf-layout-cell"></div>
+          </div>
+        </div>
+        <div class="spdf-orient">
+          Orientation:
+          <button class="spdf-opt active" id="spdf-orient-portrait" type="button" data-orient="portrait">Portrait</button>
+          <button class="spdf-opt" id="spdf-orient-landscape" type="button" data-orient="landscape">Landscape</button>
+          <span>Margin: 1cm (fixed)</span>
+        </div>
+        <button class="spdf-btn" id="spdf-to-step5" type="button">Continue to Process →</button>
+      </section>
+      <section class="spdf-step locked" id="spdf-step-5" data-step="5">
+        <h3>Step 5 — Process in Browser</h3>
+        <button class="spdf-btn" id="spdf-process-btn" type="button">⚡ Enhance PDF</button>
+        <div class="spdf-progress-wrap" id="spdf-progress-wrap" style="display:none">
+          <div class="spdf-progress" id="spdf-progress"></div>
+        </div>
+        <div class="spdf-status" id="spdf-status">Waiting to process.</div>
+      </section>
+      <section class="spdf-step locked" id="spdf-step-6" data-step="6">
+        <h3>Step 6 — Download</h3>
+        <div class="spdf-ok" id="spdf-ready-text">Your PDF will appear here after processing.</div>
+        <div class="spdf-summary" id="spdf-summary">Summary will be generated after processing.</div>
+        <button class="spdf-btn" id="spdf-download-btn" type="button" disabled>⬇ Download PDF</button>
+        <button class="spdf-reset" id="spdf-start-over" type="button">Start Over</button>
+        <div class="spdf-foot">No file was sent to any server. Nothing is stored after you leave this page.</div>
+      </section>
+    </div>
+  </section>
+  <script src="app.compiled.js" defer></script>
+  <script nonce="notiqnonce">
+    (function () {
+      const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+      const state = {
+        maxUnlocked: 1,
+        currentStep: 1,
+        pdfDoc: null,
+        sourceFile: null,
+        selectedPages: new Set(),
+        orientation: 'portrait',
+        processedBlob: null
+      };
+      let previousTitle = '';
+      let observer;
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      function wait(ms) {
+        return new Promise(function (resolve) { setTimeout(resolve, ms); });
+      }
+
+      function clamp(n, min, max) {
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function formatBytes(bytes) {
+        if (!bytes) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let i = 0;
+        while (size >= 1024 && i < units.length - 1) {
+          size /= 1024;
+          i += 1;
+        }
+        return size.toFixed(i === 0 ? 0 : 2) + ' ' + units[i];
+      }
+
+      function ensurePdfWorker() {
+        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+        }
+      }
+
+      function removeUploadTeaser() {
+        // Keep React-managed nodes intact; CSS already hides this card.
+      }
+
+      function stepEls() {
+        return Array.from(document.querySelectorAll('.spdf-step'));
+      }
+
+      function indicatorEls() {
+        return Array.from(document.querySelectorAll('.spdf-ind'));
+      }
+
+      function updateIndicators() {
+        indicatorEls().forEach(function (el) {
+          const step = Number(el.dataset.step);
+          el.classList.remove('completed', 'current');
+          if (step < state.maxUnlocked) el.classList.add('completed');
+          if (step === state.currentStep) el.classList.add('current');
+        });
+      }
+
+      function updateStepLocks() {
+        stepEls().forEach(function (el) {
+          const step = Number(el.dataset.step);
+          el.classList.toggle('locked', step > state.maxUnlocked);
+        });
+      }
+
+      function unlockStep(step) {
+        if (step > state.maxUnlocked) state.maxUnlocked = step;
+        updateStepLocks();
+        updateIndicators();
+      }
+
+      function setCurrentStep(step) {
+        state.currentStep = step;
+        updateIndicators();
+      }
+
+      function scrollToStep(step) {
+        const el = byId('spdf-step-' + step);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        setCurrentStep(step);
+      }
+
+      function updateSelectionCount() {
+        const count = state.selectedPages.size;
+        byId('spdf-selected-count').textContent = count + ' pages selected';
+        byId('spdf-to-step3').disabled = count === 0;
+      }
+
+      function updateLayoutPreview() {
+        const rowsInput = byId('spdf-rows');
+        const colsInput = byId('spdf-cols');
+        const rows = clamp(parseInt(rowsInput.value, 10) || 1, 1, 8);
+        const cols = clamp(parseInt(colsInput.value, 10) || 1, 1, 8);
+        rowsInput.value = rows;
+        colsInput.value = cols;
+        const slides = rows * cols;
+        byId('spdf-layout-preview').value = '= ' + slides + ' slides per page';
+        const invalid = slides > 64;
+        byId('spdf-layout-warning').hidden = !invalid;
+        byId('spdf-to-step5').disabled = invalid;
+        renderLayoutSkeleton(rows, cols);
+      }
+
+      function renderLayoutSkeleton(rows, cols) {
+        const skel = byId('spdf-layout-skel');
+        if (!skel) return;
+        skel.replaceChildren();
+        skel.style.setProperty('--cols', String(cols));
+        const total = rows * cols;
+        for (let i = 0; i < total; i += 1) {
+          const cell = document.createElement('div');
+          cell.className = 'spdf-layout-cell';
+          skel.appendChild(cell);
+        }
+      }
+
+      function getEnhancementOptions() {
+        return {
+          invert: byId('spdf-opt-invert').checked,
+          removeBg: byId('spdf-opt-rmbg').checked,
+          bw: byId('spdf-opt-bw').checked,
+          removeLogo: byId('spdf-opt-rmlogo').checked
+        };
+      }
+
+      function getEnhancementSummary() {
+        const opts = getEnhancementOptions();
+        const list = [];
+        if (opts.invert) list.push('Invert Colors');
+        if (opts.removeBg) list.push('Remove White Backgrounds');
+        if (opts.bw) list.push('Black & White');
+        if (opts.removeLogo) list.push('Remove Logo/Watermark');
+        return list.length ? list.join(', ') : 'None';
+      }
+
+      function setOrientation(value) {
+        state.orientation = value;
+        document.querySelectorAll('.spdf-opt[data-orient]').forEach(function (btn) {
+          btn.classList.toggle('active', btn.dataset.orient === value);
+        });
+      }
+
+      function setProgress(percent, status) {
+        byId('spdf-progress-wrap').style.display = 'block';
+        byId('spdf-progress').style.width = clamp(percent, 0, 100) + '%';
+        byId('spdf-status').textContent = status;
+      }
+
+      function applyCanvasEnhancements(canvas, opts) {
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const img = ctx.getImageData(0, 0, w, h);
+        const d = img.data;
+
+        for (let i = 0; i < d.length; i += 4) {
+          let r = d[i];
+          let g = d[i + 1];
+          let b = d[i + 2];
+          const avg = (r + g + b) / 3;
+
+          if (opts.removeBg && avg > 224) {
+            r = 255; g = 255; b = 255;
+          }
+          if (opts.bw) {
+            const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+            r = gray; g = gray; b = gray;
+          }
+          if (opts.invert) {
+            r = 255 - r; g = 255 - g; b = 255 - b;
+          }
+          d[i] = r;
+          d[i + 1] = g;
+          d[i + 2] = b;
+        }
+        ctx.putImageData(img, 0, 0);
+
+        if (opts.removeLogo) {
+          const patchW = Math.floor(w * 0.17);
+          const patchH = Math.floor(h * 0.1);
+          ctx.fillStyle = 'rgba(255,255,255,0.92)';
+          ctx.fillRect(0, 0, patchW, patchH);
+          ctx.fillRect(w - patchW, 0, patchW, patchH);
+          ctx.fillRect(0, h - patchH, patchW, patchH);
+          ctx.fillRect(w - patchW, h - patchH, patchW, patchH);
+        }
+      }
+
+      async function canvasToJpgBytes(canvas) {
+        return new Promise(function (resolve, reject) {
+          canvas.toBlob(async function (blob) {
+            if (!blob) {
+              reject(new Error('Failed to encode image.'));
+              return;
+            }
+            resolve(new Uint8Array(await blob.arrayBuffer()));
+          }, 'image/jpeg', 0.92);
+        });
+      }
+
+      async function renderThumbnails() {
+        const wrap = byId('spdf-thumbs');
+        wrap.replaceChildren();
+        if (!state.pdfDoc) return;
+
+        for (let pageNo = 1; pageNo <= state.pdfDoc.numPages; pageNo += 1) {
+          const page = await state.pdfDoc.getPage(pageNo);
+          const viewport = page.getViewport({ scale: 0.42 });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+          const card = document.createElement('div');
+          card.className = 'spdf-thumb';
+          card.dataset.page = String(pageNo);
+          const strike = document.createElement('div');
+          strike.className = 'strike';
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.textContent = 'Page ' + pageNo;
+          card.appendChild(canvas);
+          card.appendChild(strike);
+          card.appendChild(meta);
+          card.addEventListener('click', function () {
+            if (state.selectedPages.has(pageNo)) {
+              state.selectedPages.delete(pageNo);
+              card.classList.add('off');
+            } else {
+              state.selectedPages.add(pageNo);
+              card.classList.remove('off');
+            }
+            updateSelectionCount();
+          });
+          wrap.appendChild(card);
+        }
+        updateSelectionCount();
+      }
+
+      async function loadPdfFile(file) {
+        if (!file) return;
+        const note = byId('spdf-upload-note');
+        const meta = byId('spdf-upload-meta');
+        note.textContent = '';
+
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) {
+          note.textContent = 'PPT/PPTX support is coming soon. Please upload a PDF.';
+          return;
+        }
+        if (!lower.endsWith('.pdf')) {
+          note.textContent = 'Only PDF is supported in this section.';
+          return;
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+          note.textContent = 'File too large. Maximum size is 50 MB.';
+          return;
+        }
+
+        try {
+          ensurePdfWorker();
+          meta.textContent = 'Loading PDF in browser...';
+          const bytes = await file.arrayBuffer();
+          const head = new Uint8Array(bytes.slice(0, 4));
+          const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+          if (!isPdf) {
+            note.textContent = 'Invalid PDF signature. Please upload a valid PDF.';
+            meta.textContent = 'No file selected.';
+            return;
+          }
+          const task = window.pdfjsLib.getDocument({ data: bytes });
+          state.pdfDoc = await task.promise;
+          state.sourceFile = file;
+          state.selectedPages = new Set(Array.from({ length: state.pdfDoc.numPages }, function (_, i) { return i + 1; }));
+          meta.textContent = file.name + ' · ' + state.pdfDoc.numPages + ' pages · ' + formatBytes(file.size);
+          unlockStep(2);
+          await renderThumbnails();
+          scrollToStep(2);
+        } catch (err) {
+          console.error(err);
+          note.textContent = 'Could not open this PDF. Please try another file.';
+          meta.textContent = 'No file selected.';
+        }
+      }
+
+      async function processPdf() {
+        if (!state.pdfDoc || !state.selectedPages.size) return;
+        if (!window.PDFLib) {
+          byId('spdf-status').textContent = 'pdf-lib not loaded.';
+          return;
+        }
+
+        const processBtn = byId('spdf-process-btn');
+        processBtn.disabled = true;
+        byId('spdf-download-btn').disabled = true;
+        byId('spdf-ready-text').textContent = 'Processing in your browser...';
+
+        try {
+          const rows = clamp(parseInt(byId('spdf-rows').value, 10) || 1, 1, 8);
+          const cols = clamp(parseInt(byId('spdf-cols').value, 10) || 1, 1, 8);
+          const slidesPerPage = rows * cols;
+          const selected = Array.from(state.selectedPages).sort(function (a, b) { return a - b; });
+          const opts = getEnhancementOptions();
+          const slideImages = [];
+
+          setProgress(8, 'Loading pages...');
+          for (let i = 0; i < selected.length; i += 1) {
+            const pageNo = selected[i];
+            const page = await state.pdfDoc.getPage(pageNo);
+            const viewport = page.getViewport({ scale: 1.8 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            applyCanvasEnhancements(canvas, opts);
+            const bytes = await canvasToJpgBytes(canvas);
+            slideImages.push({ bytes: bytes });
+            const pct = 10 + Math.round(((i + 1) / selected.length) * 48);
+            setProgress(pct, 'Applying enhancements... (' + (i + 1) + '/' + selected.length + ')');
+            if (i % 3 === 0) await wait(8);
+          }
+
+          const PDFDocument = window.PDFLib.PDFDocument;
+          const outPdf = await PDFDocument.create();
+          const pageWidth = state.orientation === 'portrait' ? 595.28 : 841.89;
+          const pageHeight = state.orientation === 'portrait' ? 841.89 : 595.28;
+          const margin = 28.35;
+          const usableW = pageWidth - margin * 2;
+          const usableH = pageHeight - margin * 2;
+          const cellW = usableW / cols;
+          const cellH = usableH / rows;
+
+          setProgress(66, 'Arranging layout...');
+          for (let start = 0; start < slideImages.length; start += slidesPerPage) {
+            const outPage = outPdf.addPage([pageWidth, pageHeight]);
+            const chunk = slideImages.slice(start, start + slidesPerPage);
+            for (let i = 0; i < chunk.length; i += 1) {
+              const row = Math.floor(i / cols);
+              const col = i % cols;
+              const img = await outPdf.embedJpg(chunk[i].bytes);
+              const boxX = margin + col * cellW;
+              const boxY = pageHeight - margin - (row + 1) * cellH;
+              const ratio = Math.min(cellW / img.width, cellH / img.height);
+              const drawW = img.width * ratio;
+              const drawH = img.height * ratio;
+              const drawX = boxX + (cellW - drawW) / 2;
+              const drawY = boxY + (cellH - drawH) / 2;
+              outPage.drawImage(img, { x: drawX, y: drawY, width: drawW, height: drawH });
+            }
+            const pct = 72 + Math.round(((start + chunk.length) / slideImages.length) * 24);
+            setProgress(pct, 'Arranging layout...');
+          }
+
+          setProgress(97, 'Finalising PDF...');
+          const bytesOut = await outPdf.save();
+          state.processedBlob = new Blob([bytesOut], { type: 'application/pdf' });
+          byId('spdf-download-btn').disabled = false;
+          byId('spdf-ready-text').textContent = 'Your PDF is ready!';
+          byId('spdf-summary').textContent =
+            'Pages included: ' + selected.length + '\n' +
+            'Enhancements applied: ' + getEnhancementSummary() + '\n' +
+            'Layout used: ' + rows + ' x ' + cols + ' (' + slidesPerPage + ' slides/page), ' + state.orientation + ', 1cm margins';
+          setProgress(100, 'Done. Download your optimized PDF.');
+          unlockStep(6);
+          scrollToStep(6);
+        } catch (err) {
+          console.error(err);
+          byId('spdf-status').textContent = 'Processing failed. Try fewer pages or lighter settings.';
+        } finally {
+          processBtn.disabled = false;
+        }
+      }
+
+      function downloadPdf() {
+        if (!state.processedBlob) return;
+        const base = (state.sourceFile?.name || 'slides').replace(/\.(pdf|ppt|pptx)$/i, '').replace(/[^\w.-]+/g, '-');
+        const url = URL.createObjectURL(state.processedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = base + '-print-ready.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      function resetTool() {
+        state.maxUnlocked = 1;
+        state.currentStep = 1;
+        state.pdfDoc = null;
+        state.sourceFile = null;
+        state.selectedPages = new Set();
+        state.orientation = 'portrait';
+        state.processedBlob = null;
+
+        byId('spdf-file-input').value = '';
+        byId('spdf-upload-meta').textContent = 'No file selected.';
+        byId('spdf-upload-note').textContent = '';
+        byId('spdf-thumbs').replaceChildren();
+        byId('spdf-selected-count').textContent = '0 pages selected';
+        byId('spdf-to-step3').disabled = true;
+        byId('spdf-opt-invert').checked = false;
+        byId('spdf-opt-rmbg').checked = false;
+        byId('spdf-opt-bw').checked = false;
+        byId('spdf-opt-rmlogo').checked = false;
+        byId('spdf-rows').value = '1';
+        byId('spdf-cols').value = '1';
+        byId('spdf-progress-wrap').style.display = 'none';
+        byId('spdf-progress').style.width = '0%';
+        byId('spdf-status').textContent = 'Waiting to process.';
+        byId('spdf-ready-text').textContent = 'Your PDF will appear here after processing.';
+        byId('spdf-summary').textContent = 'Summary will be generated after processing.';
+        byId('spdf-download-btn').disabled = true;
+        setOrientation('portrait');
+        updateLayoutPreview();
+        updateStepLocks();
+        updateIndicators();
+        scrollToStep(1);
+      }
+
+      function activateSlidesView() {
+        document.body.classList.add('spdf-active');
+        if (!previousTitle) {
+          previousTitle = document.querySelector('.topbar-title')?.textContent || '';
+        }
+        const title = document.querySelector('.topbar-title');
+        if (title) title.textContent = 'Slides -> PDF';
+        document.querySelectorAll('.sb-nav a.active').forEach(function (a) {
+          if (!a.hasAttribute('data-spdf-nav')) a.classList.remove('active');
+        });
+        document.querySelector('.sb-settings.active')?.classList.remove('active');
+        document.querySelector('[data-spdf-nav]')?.classList.add('active');
+        setCurrentStep(Math.min(state.maxUnlocked, 6));
+      }
+
+      function deactivateSlidesView() {
+        if (!document.body.classList.contains('spdf-active')) return;
+        document.body.classList.remove('spdf-active');
+        document.querySelector('[data-spdf-nav]')?.classList.remove('active');
+        const title = document.querySelector('.topbar-title');
+        if (title && previousTitle) title.textContent = previousTitle;
+        previousTitle = '';
+      }
+
+      function ensureSlidesNav() {
+        const nav = document.querySelector('.sb-nav');
+        if (!nav || nav.querySelector('[data-spdf-nav]')) return;
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '#';
+        link.setAttribute('data-spdf-nav', '');
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'nav-icon';
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('width', '18');
+        icon.setAttribute('height', '18');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.setAttribute('stroke-linecap', 'round');
+        icon.setAttribute('stroke-linejoin', 'round');
+        const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p1.setAttribute('d', 'M3 5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2H3z');
+        const p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p2.setAttribute('d', 'M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z');
+        icon.appendChild(p1);
+        icon.appendChild(p2);
+        iconWrap.appendChild(icon);
+        link.appendChild(iconWrap);
+        link.appendChild(document.createTextNode('Slides -> PDF'));
+        li.appendChild(link);
+        nav.appendChild(li);
+        link.addEventListener('click', function (e) {
+          e.preventDefault();
+          activateSlidesView();
+        });
+      }
+
+      function bindSlidesEvents() {
+        const acc = byId('spdf-accordion');
+        const accBtn = byId('spdf-acc-toggle');
+        const fileInput = byId('spdf-file-input');
+        const dropzone = byId('spdf-dropzone');
+
+        accBtn.addEventListener('click', function () {
+          acc.classList.toggle('open');
+          accBtn.textContent = acc.classList.contains('open') ? 'How it works ▴' : 'How it works ▾';
+        });
+
+        dropzone.addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', function (e) { loadPdfFile(e.target.files?.[0]); });
+        dropzone.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          dropzone.classList.add('drag');
+        });
+        dropzone.addEventListener('dragleave', function () { dropzone.classList.remove('drag'); });
+        dropzone.addEventListener('drop', function (e) {
+          e.preventDefault();
+          dropzone.classList.remove('drag');
+          loadPdfFile(e.dataTransfer?.files?.[0]);
+        });
+
+        byId('spdf-select-all').addEventListener('click', function () {
+          if (!state.pdfDoc) return;
+          state.selectedPages = new Set(Array.from({ length: state.pdfDoc.numPages }, function (_, i) { return i + 1; }));
+          document.querySelectorAll('#spdf-thumbs .spdf-thumb').forEach(function (card) { card.classList.remove('off'); });
+          updateSelectionCount();
+        });
+
+        byId('spdf-deselect-all').addEventListener('click', function () {
+          state.selectedPages = new Set();
+          document.querySelectorAll('#spdf-thumbs .spdf-thumb').forEach(function (card) { card.classList.add('off'); });
+          updateSelectionCount();
+        });
+
+        byId('spdf-to-step3').addEventListener('click', function () {
+          if (!state.selectedPages.size) return;
+          unlockStep(3);
+          scrollToStep(3);
+        });
+        byId('spdf-to-step4').addEventListener('click', function () {
+          unlockStep(4);
+          scrollToStep(4);
+        });
+        byId('spdf-to-step5').addEventListener('click', function () {
+          unlockStep(5);
+          scrollToStep(5);
+        });
+
+        byId('spdf-process-btn').addEventListener('click', processPdf);
+        byId('spdf-download-btn').addEventListener('click', downloadPdf);
+        byId('spdf-start-over').addEventListener('click', resetTool);
+
+        byId('spdf-rows').addEventListener('input', updateLayoutPreview);
+        byId('spdf-cols').addEventListener('input', updateLayoutPreview);
+        document.querySelectorAll('.spdf-opt[data-orient]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            setOrientation(btn.dataset.orient);
+          });
+        });
+
+        document.addEventListener('click', function (e) {
+          const sideNav = e.target.closest('.sb-nav a');
+          const sideBottom = e.target.closest('.sb-settings');
+          if (sideNav && !sideNav.hasAttribute('data-spdf-nav')) deactivateSlidesView();
+          if (sideBottom) deactivateSlidesView();
+        });
+      }
+
+      function watchAppDom() {
+        const root = byId('root');
+        if (!root) return;
+        let scheduled = false;
+        let lastRun = 0;
+
+        const runMaintenance = function () {
+          scheduled = false;
+          lastRun = Date.now();
+
+          if (!document.querySelector('[data-spdf-nav]')) ensureSlidesNav();
+          if (document.querySelector('.pdf-brand-card')) removeUploadTeaser();
+
+          if (document.body.classList.contains('spdf-active')) {
+            document.querySelector('[data-spdf-nav]')?.classList.add('active');
+            document.querySelectorAll('.sb-nav a.active').forEach(function (a) {
+              if (!a.hasAttribute('data-spdf-nav')) a.classList.remove('active');
+            });
+            const title = document.querySelector('.topbar-title');
+            if (title && title.textContent !== 'Slides -> PDF') title.textContent = 'Slides -> PDF';
+          }
+        };
+
+        observer = new MutationObserver(function () {
+          const now = Date.now();
+          if (scheduled || now - lastRun < 300) return;
+          scheduled = true;
+          setTimeout(runMaintenance, 120);
+        });
+
+        observer.observe(root, { childList: true, subtree: true });
+      }
+
+      function initSlidesFeature() {
+        ensurePdfWorker();
+        ensureSlidesNav();
+        removeUploadTeaser();
+        bindSlidesEvents();
+        updateLayoutPreview();
+        updateStepLocks();
+        updateIndicators();
+        watchAppDom();
+      }
+
+      function showLoadError() {
+        const root = byId('root');
+        root.replaceChildren();
+        const box = document.createElement('div');
+        box.style.padding = '40px';
+        box.style.textAlign = 'center';
+        box.style.fontFamily = 'system-ui, sans-serif';
+        const h2 = document.createElement('h2');
+        h2.textContent = 'Loading Error';
+        const p1 = document.createElement('p');
+        p1.textContent = 'Main app bundle is missing or failed to load.';
+        const p2 = document.createElement('p');
+        p2.textContent = 'Run: npm run build:app then refresh.';
+        const p3 = document.createElement('p');
+        p3.textContent = 'If needed, restart with: npm run dev';
+        box.appendChild(h2);
+        box.appendChild(p1);
+        box.appendChild(p2);
+        box.appendChild(p3);
+        root.appendChild(box);
+      }
+
+      function waitForApp(tryCount) {
+        const hasMount = !!byId('root')?.children?.length;
+        const hasSidebar = !!document.querySelector('.sidebar .sb-nav');
+        if (hasMount && hasSidebar) {
+          initSlidesFeature();
+          return;
+        }
+        if (tryCount >= 120) {
+          showLoadError();
+          return;
+        }
+        setTimeout(function () { waitForApp(tryCount + 1); }, 100);
+      }
+
+      window.addEventListener('load', function () {
+        waitForApp(0);
+      });
+    })();
+  </script>
+</body>
+
+</html>
