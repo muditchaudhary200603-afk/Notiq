@@ -1583,8 +1583,17 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous" nonce="notiqnonce"></script>
     <script nonce="notiqnonce">
+        // BUG 2: Immediate Redirect for Magic Link Tokens
+        (function() {
+            const h = window.location.hash;
+            const s = window.location.search;
+            if (h.includes('access_token') || h.includes('id_token') || s.includes('token_hash') || s.includes('code=')) {
+                window.location.replace('/app.html' + h + s);
+            }
+        })();
+
         document.addEventListener('DOMContentLoaded', () => {
 
             // --- PATCH 1: ROTATING FLASHCARD ---
@@ -1771,9 +1780,9 @@
             if (menuToggle && navLinksContainer) {
                 menuToggle.addEventListener('click', () => {
                     navLinksContainer.classList.toggle('open');
-                });
+                }, { once: false });
                 navLinksContainer.querySelectorAll('.nav-link').forEach((l) => {
-                    l.addEventListener('click', () => navLinksContainer.classList.remove('open'));
+                    l.addEventListener('click', () => navLinksContainer.classList.remove('open'), { once: false });
                 });
             }
 
@@ -1781,7 +1790,6 @@
             const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://wjlyczzrhloayklbprmc.supabase.co';
             const SUPABASE_ANON_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqbHljenpyaGxvYXlrbGJwcm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMDM4ODYsImV4cCI6MjA4Nzg3OTg4Nn0.tV1sdNzEx6x_OGE0dIKwXrbubU0Iu2NQRge2Anj-6ks';
             let supabaseClient = null;
-            let isLoggedIn = false;
 
             try {
                 if (window.supabase?.createClient) {
@@ -1972,42 +1980,48 @@
                 }
             }
 
+            // BUG 1: Consolidate ONE listener for all login buttons
             btns.forEach(id => {
                 const b = document.getElementById(id);
-                if (b) b.addEventListener('click', openModal);
+                if (b) {
+                    b.addEventListener('click', openModal, { once: false });
+                }
             });
-            if (closeBtn) closeBtn.addEventListener('click', closeModal);
-            if (subBtn) subBtn.addEventListener('click', sendMagicLink);
+
+            if (closeBtn) closeBtn.addEventListener('click', closeModal, { once: false });
+            if (subBtn) {
+                subBtn.addEventListener('click', sendMagicLink, { once: false });
+            }
             if (inp) {
                 inp.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         sendMagicLink();
                     }
-                });
+                }, { once: false });
             }
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) closeModal();
-                });
+                }, { once: false });
             }
-            if (closeDocModalBtn) closeDocModalBtn.addEventListener('click', closeDocModal);
+            if (closeDocModalBtn) closeDocModalBtn.addEventListener('click', closeDocModal, { once: false });
             if (docModal) {
                 docModal.addEventListener('click', (e) => {
                     if (e.target === docModal) closeDocModal();
-                });
+                }, { once: false });
             }
             document.querySelectorAll('a[data-doc]').forEach((link) => {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     openDocModal(link.getAttribute('data-doc'));
-                });
+                }, { once: false });
             });
             document.addEventListener('keydown', (e) => {
                 if (e.key !== 'Escape') return;
                 closeModal();
                 closeDocModal();
-            });
+            }, { once: false });
 
             // Fast-track if session exists or hash is present
             if ((window.location.hash.includes('access_token') || window.location.hash.includes('id_token')) && isLoggedIn) {

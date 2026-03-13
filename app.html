@@ -11,15 +11,15 @@
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'nonce-notiqnonce'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; connect-src 'self' https://api.groq.com https://*.supabase.co https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;">
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
 
   <script nonce="notiqnonce">
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -581,7 +581,7 @@
   </style>
 
   <!-- Supabase Auth Guard -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js" crossorigin="anonymous" nonce="notiqnonce"></script>
   <script nonce="notiqnonce">
     const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://wjlyczzrhloayklbprmc.supabase.co';
     const SUPABASE_ANON_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqbHljenpyaGxvYXlrbGJwcm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMDM4ODYsImV4cCI6MjA4Nzg3OTg4Nn0.tV1sdNzEx6x_OGE0dIKwXrbubU0Iu2NQRge2Anj-6ks';
@@ -596,24 +596,20 @@
     async function checkAuth() {
       if (!supabase) return;
       
-      // If we just landed from a magic link, give it a moment to process the hash
-      if (window.location.hash.includes('access_token')) {
-        try {
-          // Explicitly wait a moment for the URL hash to be processed by Supabase
-          await new Promise(r => setTimeout(r, 800));
-          await supabase.auth.getSession();
-        } catch (_) { }
+      // Initial session check
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session && !window.location.hash.includes('access_token')) {
+        window.location.replace('/index.html');
       }
 
-      const { data } = await supabase.auth.getSession();
-      if (!data?.session) {
-        // Double check after another short delay to prevent false negatives
-        await new Promise(r => setTimeout(r, 500));
-        const { data: retryData } = await supabase.auth.getSession();
-        if (!retryData?.session) {
+      // Bug 2: Handle auth state changes robustly
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
           window.location.replace('/index.html');
+        } else if (session) {
+          console.log('User signed in:', session.user.email);
         }
-      }
+      });
     }
     checkAuth();
   </script>
